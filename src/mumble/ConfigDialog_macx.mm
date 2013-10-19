@@ -32,9 +32,17 @@
 #include "ConfigDialog_macx.h"
 #include "AudioInput.h"
 #include "AudioOutput.h"
-#include "Global.h"
 
 #import "ConfigDialogDelegate.h"
+
+#include "Global.h"
+
+#ifdef QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+static NSWindow *qt_mac_window_for(QWidget *w) {
+	NSView *view = (NSView *) w->winId();
+	return [view window];
+}
+#endif
 
 class QWidgetPrivate {
 	public:
@@ -182,17 +190,20 @@ void ConfigDialogMac::setupMacToolbar(bool expert) {
 	   synchronize toolbars with the same identifier, so that if multiple NSToolbars with the same identifier
 	   are used within the same application, they all stay in sync automatically. */
 	NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier: @"MumbleConfigDialog"];
-        [toolbar setDisplayMode: NSToolbarDisplayModeIconAndLabel];
-        [toolbar setSizeMode: NSToolbarSizeModeRegular];
+	[toolbar setDisplayMode: NSToolbarDisplayModeIconAndLabel];
+	[toolbar setSizeMode: NSToolbarSizeModeRegular];
 	[toolbar setAllowsUserCustomization:NO];
 	[toolbar setAutosavesConfiguration:NO];
 
+	// We explicitly don't autorelease here. We don't really want to have to store a reference
+	// to the delegate inside ConfigDialogMac's header. Instead, we'll just make sure to release
+	// the delegate when removing the Mac toolbar. (See ::removeMacToolbar)
 	ConfigDialogDelegate *delegate = [[ConfigDialogDelegate alloc] initWithConfigDialog:this
+	                                                               andToolbar:toolbar
 	                                                               andWidgetMap:&qmWidgets
 	                                                               inExpertMode:expert];
-
-	[toolbar setDelegate: delegate];
-	[window setToolbar: toolbar];
+	[toolbar setDelegate:delegate];
+	[window setToolbar:toolbar];
 
 	/* Hack alert: Qt doesn't export its Cocoa helper utilities, so this is the best we
 	 * can do to make the window the right size after setting up a NSToolbar manually. */
@@ -203,11 +214,9 @@ void ConfigDialogMac::removeMacToolbar() {
 	NSWindow *window = qt_mac_window_for(this);
 	NSToolbar *toolbar = [window toolbar];
 
-	if (toolbar != nil) {
-		[[toolbar delegate] release];
-		[toolbar setDelegate: nil];
-		[toolbar release];
-	}
+	[[toolbar delegate] release];
+	[toolbar setDelegate:nil];
+	[toolbar release];
 }
 
 void ConfigDialogMac::on_widgetSelected(ConfigWidget *cw) {
